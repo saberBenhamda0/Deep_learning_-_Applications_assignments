@@ -30,16 +30,16 @@ The original 60,000 training images are split using stratified sampling and seed
 
 | Setting | Part 1 | Part 2: ViT |
 | --- | --- | --- |
-| Quick mode | `False` | `True` |
-| Training images | 54,000 | 6,000 |
-| Validation images | 6,000 | 1,000 |
+| Quick mode | `False` | `False` |
+| Training images | 54,000 | 54,000 |
+| Validation images | 6,000 | 6,000 |
 | Test images | 10,000 | 10,000 |
-| Epochs | 10 | 3 |
+| Epochs | 10 | 10 |
 | GPU | Tesla T4 | Tesla T4 |
 | PyTorch | 2.11.0+cu130 | 2.11.0+cu130 |
 | Torchvision | 0.26.0+cu130 | 0.26.0+cu130 |
 
-**The ViT result is a pilot experiment, not an equal-budget comparison with Part 1.** Its smaller training set is a stratified subset of the training partition. The Part 2 comparison cell correctly rejects combining the runs because `quick`, `epochs`, `train_n` and `val_n` differ.
+Both parts use the same seeded training/validation split, official test set, epoch count and GPU type. The updated Part 2 notebook successfully combines all five models in its results table. This improves comparability, although input resolutions, pretraining, architectures and computational costs still differ.
 
 For classifiers, the checkpoint with the lowest validation cross-entropy is restored before test evaluation. Faster R-CNN uses the checkpoint with the highest validation classification accuracy.
 
@@ -147,41 +147,62 @@ Each image is split into patches and projected into embeddings. After adding the
 
 ### Step 2: Train and evaluate
 
-The saved pilot uses AdamW with learning rate **0.001**, weight decay **0.0001**, and batch size **128**.
+The full run uses AdamW with learning rate **0.001**, weight decay **0.0001**, batch size **128**, and **10 epochs** over **54,000 training images**.
 
 | Epoch | Training loss | Training accuracy | Validation loss | Validation accuracy |
 | --- | ---: | ---: | ---: | ---: |
-| 1 | 2.0092 | 26.28% | 1.6909 | 37.10% |
-| 2 | 1.6352 | 39.55% | 1.4540 | 45.90% |
-| 3 | 1.4195 | 48.72% | 1.1522 | 59.10% |
+| 1 | 1.1305 | 59.41% | 0.4735 | 84.63% |
+| 2 | 0.4029 | 87.07% | 0.2370 | 92.52% |
+| 3 | 0.2641 | 91.66% | 0.1741 | 94.53% |
+| 4 | 0.2044 | 93.56% | 0.1406 | 95.78% |
+| 5 | 0.1665 | 94.68% | 0.1353 | 96.07% |
+| 6 | 0.1430 | 95.47% | 0.1183 | 96.75% |
+| 7 | 0.1309 | 95.80% | 0.1132 | 96.73% |
+| 8 | 0.1141 | 96.37% | 0.0986 | 97.38% |
+| 9 | 0.1073 | 96.56% | 0.0931 | 97.27% |
+| 10 | 0.0972 | 96.89% | 0.0920 | 96.85% |
 
-| Test metric | ViT pilot result |
+| Test metric | ViT result |
 | --- | ---: |
-| Accuracy | 60.88% |
-| Macro-F1 | 60.0109% |
-| Cross-entropy | 1.141775 |
-| Training time | 7.68 seconds |
+| Accuracy | 97.50% |
+| Macro-F1 | 97.4710% |
+| Cross-entropy | 0.083976 |
+| Training time | 205.40 seconds (3.42 minutes) |
 
-Validation loss decreases throughout the three epochs and validation accuracy continues to improve. This suggests that the pilot has not converged and warrants longer training; it does not demonstrate that the ViT architecture is intrinsically unsuitable for MNIST.
+Training loss decreases from **1.1305** to **0.0972**, while validation loss decreases from **0.4735** to **0.0920**. The lowest validation loss occurs at epoch **10**, so this checkpoint is restored for testing. Validation accuracy peaks at **97.38%** at epoch **8**, but checkpoint selection is based on loss rather than accuracy. These metrics need not improve together because cross-entropy also reflects prediction confidence.
 
-The per-class report shows strong variation: digit **1** has an F1 score of approximately **93.30%**, while digits **5** and **2** obtain approximately **37.47%** and **41.60%**. The model therefore recognizes some classes much more reliably than others. The notebook includes a confusion matrix and misclassified examples for further inspection.
+The final test accuracy corresponds to **9,750 correct predictions** and **250 errors** out of 10,000 images. Macro-F1 is close to accuracy, indicating strong aggregate performance across digit classes, although it does not imply identical performance for every class. The notebook provides a confusion matrix, per-class report and examples of misclassified digits for closer inspection.
+
+Validation loss continues improving near the end of training, so additional training or hyperparameter tuning may be useful. This trend alone does not guarantee further improvements on unseen data.
 
 ### Step 3: Compare with Part 1
 
-The saved Part 1 models achieve over **99%** accuracy, while the saved ViT pilot reaches **60.88%**. However, Part 1 uses **nine times more training images** and **more than three times as many epochs**. The ViT's shorter runtime must therefore not be interpreted as evidence that it is the most efficient model at a comparable accuracy.
+All five saved runs now use 54,000 training images, 6,000 validation images, 10,000 test images and 10 epochs on a Tesla T4.
 
-CNNs encode useful locality and weight-sharing assumptions, whereas the ViT learns relationships between image patches through attention. These architectural differences may affect sample efficiency, but this experiment does not isolate their effect because the training budgets differ.
+| Model | Test accuracy | Macro-F1 | Test cross-entropy | Training time (s) |
+| --- | ---: | ---: | ---: | ---: |
+| Custom CNN | 99.15% | 99.1413% | 0.028509 | **132.58** |
+| VGG16 | **99.34%** | **99.3396%** | 0.021270 | 3,540.99 |
+| AlexNet | 99.31% | 99.3035% | **0.020648** | 1,014.24 |
+| Faster R-CNN | 99.27% | 99.2622% | Not applicable | 4,001.54 |
+| ViT | 97.50% | 97.4710% | 0.083976 | 205.40 |
 
-To complete a controlled comparison, rerun Part 2 with `QUICK=False`, giving it 54,000 training images, 6,000 validation images and 10 epochs. Use the same GPU type and upload the matching Part 1 `part1_results.csv` and `config.json` files. Further tuning and repeated runs may still be needed.
+**The custom CNN outperforms the ViT in both accuracy and measured training time in this experiment.** Its accuracy is **1.65 percentage points higher**, corresponding to **165 fewer test errors**. ViT takes approximately **1.55 times** the CNN training time, while remaining faster than AlexNet, VGG16 and Faster R-CNN.
 
-The Part 2 output stating **“Best measured accuracy: ViT”** refers only to the one-row table remaining after the incompatible Part 1 results were rejected. It does **not** mean ViT outperformed the Part 1 models.
+VGG16 remains the most accurate model, exceeding ViT by **1.84 percentage points**, but takes approximately **17.24 times** its training time. The results therefore show a clear tradeoff: the lightweight CNN is the most efficient high-accuracy solution in these runs, while VGG16 gives the highest observed accuracy at much greater cost.
+
+CNNs build in locality and spatial weight sharing, while the ViT learns relationships between image patches through self-attention. The observed results are consistent with these CNN assumptions being useful for this small-image task. However, a single configuration and seed do not establish that CNNs always outperform transformers. The ViT is trained from scratch, whereas VGG16 and AlexNet benefit from ImageNet pretraining; matching image counts and epochs does not equalize pretraining or compute.
+
+### Part 2 conclusion
+
+The ViT implementation successfully learns handwritten-digit recognition and achieves **97.50% test accuracy**. For the tested architectures and settings, it does not surpass the CNN-based models. Further work could investigate learning-rate schedules, additional epochs, patch sizes and model dimensions, using validation data for selection before a final test evaluation.
 
 ## 4. Reproduce the experiments
 
 1. Open the Part 1 notebook in Google Colab and select **Runtime → Change runtime type → GPU**.
 2. Set `QUICK=False` to reproduce the full Part 1 configuration, then run all cells in order.
 3. Download the generated output ZIP before the runtime disconnects. It includes checkpoints, training histories, plots, results and configuration.
-4. Open Part 2. Keep `QUICK=True` to reproduce the saved pilot, or set `QUICK=False` for a comparison using the same data sizes and epoch count as Part 1.
+4. Open Part 2 and set `QUICK=False` to reproduce the saved full run with the same data sizes and epoch count as Part 1.
 5. Run Part 2 and upload the Part 1 CSV and configuration when requested. The comparison cell checks compatibility before merging results.
 6. Save the executed notebooks and relevant result files in the repository. Large datasets and model checkpoints do not need to be committed.
 
@@ -191,13 +212,13 @@ The saved outputs contain DataLoader worker-cleanup warnings (`can only test a c
 
 The experiments use one random seed and one saved run per model. Transfer models benefit from ImageNet pretraining and use larger inputs, so their comparison with the CNN is not an equal-compute or equal-pretraining study. Faster R-CNN solves an additional localization task using image-derived boxes. Validation computations also differ between detectors and classifiers.
 
-The ViT pilot has a different training budget and cannot support a definitive CNN-versus-transformer conclusion. No claim of statistical significance is made for the small accuracy differences among Part 1 models.
+Both parts now match data sizes and epoch counts, but the models still differ in optimization settings, input sizes, pretraining and computational cost. No claim of statistical significance or universal CNN-versus-transformer superiority is made from these single-seed results.
 
 ## 6. Brief learning synthesis
 
 Through this lab, I learned how to prepare image data, define neural architectures in PyTorch, train them on a GPU and evaluate their generalization using a separate test set. I practiced building a CNN, adapting a classification dataset for Faster R-CNN, fine-tuning pretrained networks and implementing patch embeddings and multi-head attention for a ViT.
 
-The results taught me to consider computational cost alongside accuracy: a small CNN can perform very well on a simple dataset, while a larger model may offer only a small improvement at a much higher cost. I also learned that meaningful comparisons require matching experimental settings and that different loss functions should not be compared as if they measured the same objective. My next step would be to complete the full ViT run and repeat the experiments with several seeds.
+The results taught me to consider computational cost alongside accuracy: a small CNN can perform very well on a simple dataset, while a larger model may offer only a small improvement at a much higher cost. I also learned that meaningful comparisons require matching experimental settings and that different loss functions should not be compared as if they measured the same objective. The full ViT run achieved 97.50% accuracy, while the small CNN achieved 99.15% with less measured training time. My next step would be to tune the ViT using validation data and repeat the experiments with several seeds.
 
 ## References and result provenance
 
@@ -205,4 +226,4 @@ The results taught me to consider computational cost alongside accuracy: a small
 - [Vision Transformer tutorial specified in the assignment](https://medium.com/mlearning-ai/vision-transformers-from-scratch-pytorch-a-step-by-step-guide-96c3313c2e0c)
 - [Original Vision Transformer paper](https://arxiv.org/abs/2010.11929)
 - [Torchvision documentation](https://docs.pytorch.org/vision/stable/index.html)
-- Results and implementation reviewed from repository commit [`cc3d443`](https://github.com/saberBenhamda0/Deep_learning_-_Applications_assignments/tree/cc3d4439d3c0f6e5aa9a041a097e22e1f7af6f84/tp2).
+- Results and implementation reviewed from repository commit [`f29555b`](https://github.com/saberBenhamda0/Deep_learning_-_Applications_assignments/tree/f29555b8e710b33e9bfa5ba706007ec3a561fae7/tp2).
